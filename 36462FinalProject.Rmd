@@ -1,0 +1,281 @@
+---
+title: "36462FinalProject"
+author: "zixinq"
+date: "2025-04-19"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## import data
+```{r}
+flights22 <- read.csv("flights2022.csv")
+flights23 <- read.csv("flights2023.csv")
+
+flights <- rbind(flights22, flights23)
+```
+
+## feature selection
+```{r}
+cor(flights$DEP_DEL15, flights$DISTANCE, use = "complete.obs")
+t.test(CRS_DEP_TIME ~ DEP_DEL15, data = flights)
+```
+
+```{r}
+table(flights$OP_UNIQUE_CARRIER, flights$DEP_DEL15)
+chisq.test(table(flights$OP_UNIQUE_CARRIER, flights$DEP_DEL15))
+chisq.test(table(flights$DAY_OF_WEEK, flights$DEP_DEL15))
+```
+
+```{r}
+# Ensure DEP_DEL15 is treated as binary numeric
+flights$DEP_DEL15 <- as.numeric(flights$DEP_DEL15)
+
+# Separate variable names by type
+numeric_vars <- names(flights)[sapply(flights, is.numeric)]
+numeric_vars <- setdiff(numeric_vars, "DEP_DEL15")  # exclude target
+
+categorical_vars <- names(flights)[sapply(flights, function(x) is.factor(x) || is.character(x))]
+
+
+# Filter: Correlation for numeric variables
+cor_results <- sapply(numeric_vars, function(var) {
+  tryCatch({
+    cor(flights[[var]], flights$DEP_DEL15, use = "complete.obs")
+  }, error = function(e) NA)
+})
+
+# Filter: Chi-square p-values for categorical variables
+chi_pvalues <- sapply(categorical_vars, function(var) {
+  tryCatch({
+    pval <- chisq.test(table(flights[[var]], flights$DEP_DEL15))$p.value
+    return(pval)
+  }, error = function(e) NA)
+})
+
+
+cat("Top numeric variables by absolute correlation with DEP_DEL15:\n")
+print(sort(abs(cor_results), decreasing = TRUE))
+
+cat("\nTop categorical variables by Chi-squared significance:\n")
+print(sort(chi_pvalues, decreasing = FALSE))
+```
+
+
+# logistic regression
+```{r}
+# Example: select safe predictors
+safe_vars <- c("DEP_DEL15", "CRS_DEP_TIME", "DAY_OF_WEEK", "MONTH", 
+               "DISTANCE", "OP_UNIQUE_CARRIER", "DEST", "DEP_TIME_BLK")
+# Subset and convert relevant types
+flights <- flights[, safe_vars]
+flights$DEP_DEL15 <- as.factor(flights$DEP_DEL15)
+flights$OP_UNIQUE_CARRIER <- as.factor(flights$OP_UNIQUE_CARRIER)
+flights$DEST <- as.factor(flights$DEST)
+flights$DEP_TIME_BLK <- as.factor(flights$DEP_TIME_BLK)
+flights$DAY_OF_WEEK <- as.factor(flights$DAY_OF_WEEK)
+flights$MONTH <- as.factor(flights$MONTH)
+```
+
+## train-test split
+```{r}
+# Assuming you still have the original datasets
+train <- read.csv("flights2022.csv")[, safe_vars]
+test <- read.csv("flights2023.csv")[, safe_vars]
+
+# Repeat type conversions for test data
+train$DEP_DEL15 <- as.factor(train$DEP_DEL15)
+train$OP_UNIQUE_CARRIER <- as.factor(train$OP_UNIQUE_CARRIER)
+train$DEST <- as.factor(train$DEST)
+train$DEP_TIME_BLK <- as.factor(train$DEP_TIME_BLK)
+train$DAY_OF_WEEK <- as.factor(train$DAY_OF_WEEK)
+train$MONTH <- as.factor(train$MONTH)
+
+test$DEP_DEL15 <- as.factor(test$DEP_DEL15)
+test$OP_UNIQUE_CARRIER <- as.factor(test$OP_UNIQUE_CARRIER)
+test$DEST <- as.factor(test$DEST)
+test$DEP_TIME_BLK <- as.factor(test$DEP_TIME_BLK)
+test$DAY_OF_WEEK <- as.factor(test$DAY_OF_WEEK)
+test$MONTH <- as.factor(test$MONTH)
+```
+
+```{r}
+# Remove rows with new DEST levels
+test <- test[test$DEST %in% levels(train$DEST), ]
+```
+
+## predictions
+```{r}
+model <- glm(DEP_DEL15 ~ ., data = train, family = "binomial")
+pred_probs <- predict(model, newdata = test, type = "response")
+```
+
+## AUC
+```{r}
+library(pROC)
+roc_obj <- roc(test$DEP_DEL15, pred_probs)
+auc(roc_obj)
+```
+
+
+#logistic with interaction terms
+```{r}
+model <- glm(DEP_DEL15 ~ 
+               OP_UNIQUE_CARRIER * DAY_OF_WEEK + 
+               OP_UNIQUE_CARRIER * DEP_TIME_BLK +
+               DEST * DEP_TIME_BLK +
+               CRS_DEP_TIME + DISTANCE + MONTH,
+             data = train,
+             family = "binomial")
+```
+
+```{r}
+pred_probs <- predict(model, newdata = test, type = "response")
+
+roc_obj <- roc(test$DEP_DEL15, pred_probs)
+auc(roc_obj)
+```
+
+# glmnet
+```{r}
+vars <- c("OP_UNIQUE_CARRIER", "DEST", "DEP_TIME_BLK", "DAY_OF_WEEK", "MONTH")
+
+for (v in vars) {
+  levels_all <- union(levels(factor(train[[v]])), levels(factor(test[[v]])))
+  train[[v]] <- factor(train[[v]], levels = levels_all)
+  test[[v]] <- factor(test[[v]], levels = levels_all)
+}
+```
+
+```{r}
+# Add labels for later split
+train$dataset <- "train"
+test$dataset <- "test"
+
+# Combine and drop NAs early
+all_data <- rbind(train, test)
+all_data <- na.omit(all_data)  # Remove NAs BEFORE modeling
+
+# Create design matrix
+x_all <- model.matrix(DEP_DEL15 ~ . - dataset, data = all_data)[,-1]
+y_all <- as.numeric(as.character(all_data$DEP_DEL15))
+```
+
+```{r}
+train_index <- which(all_data$dataset == "train")
+test_index <- which(all_data$dataset == "test")
+
+x_train <- x_all[train_index, ]
+y_train <- y_all[train_index]
+
+x_test <- x_all[test_index, ]
+y_test <- y_all[test_index]
+```
+
+
+```{r}
+cv_fit <- cv.glmnet(x_train, y_train, family = "binomial", alpha = 1)
+pred_probs <- predict(cv_fit, newx = x_test, s = "lambda.min", type = "response")
+auc(roc(y_test, pred_probs))
+```
+
+#random forest
+```{r}
+library(randomForest)
+```
+
+```{r}
+train <- na.omit(train)
+test <- na.omit(test)  
+```
+
+```{r}
+find_new_levels <- function(train, test, vars) {
+  for (v in vars) {
+    train_levels <- levels(factor(train[[v]]))
+    test_levels <- levels(factor(test[[v]]))
+    new_in_test <- setdiff(test_levels, train_levels)
+    if (length(new_in_test) > 0) {
+      cat(paste0("New levels in test$", v, ": "), new_in_test, "\n")
+    }
+  }
+}
+
+categorical_vars <- c("OP_UNIQUE_CARRIER", "DEST", "DEP_TIME_BLK", "DAY_OF_WEEK", "MONTH")
+find_new_levels(train, test, categorical_vars)
+
+```
+
+```{r}
+for (v in categorical_vars) {
+  combined_levels <- union(levels(factor(train[[v]])), levels(factor(test[[v]])))
+  train[[v]] <- factor(train[[v]], levels = combined_levels)
+  test[[v]] <- factor(test[[v]], levels = combined_levels)
+}
+```
+
+
+```{r}
+drop_unseen_levels <- function(train, test, vars) {
+  for (v in vars) {
+    seen_levels <- unique(train[[v]])
+    test <- test[test[[v]] %in% seen_levels, ]
+  }
+  return(test)
+}
+
+test <- drop_unseen_levels(train, test, categorical_vars)
+```
+
+
+## predictions
+```{r}
+rf_model <- randomForest(DEP_DEL15 ~ ., data = train, ntree = 200, importance = TRUE)
+rf_probs <- predict(rf_model, newdata = test, type = "prob")[,2]
+```
+
+## AUC
+```{r}
+roc_rf <- roc(test$DEP_DEL15, rf_probs)
+auc(roc_rf)  #
+importance(rf_model)
+varImpPlot(rf_model)
+```
+
+# XBoost
+```{r}
+library(xgboost)
+library(Matrix)
+
+# Convert to numeric matrix
+train_x <- model.matrix(DEP_DEL15 ~ . - 1, data = train)
+train_y <- as.numeric(as.character(train$DEP_DEL15))
+
+test_x <- model.matrix(DEP_DEL15 ~ . - 1, data = test)
+test_y <- as.numeric(as.character(test$DEP_DEL15))
+
+```
+
+```{r}
+dtrain <- xgb.DMatrix(data = train_x, label = train_y)
+dtest <- xgb.DMatrix(data = test_x, label = test_y)
+
+xgb_model <- xgboost(data = dtrain,
+                     objective = "binary:logistic",
+                     eval_metric = "auc",
+                     nrounds = 100,
+                     max_depth = 4,
+                     eta = 0.1,
+                     verbose = 0)
+```
+
+```{r}
+xgb_probs <- predict(xgb_model, newdata = dtest)
+roc_xgb <- roc(test_y, xgb_probs)
+auc(roc_xgb)
+
+```
+
+
