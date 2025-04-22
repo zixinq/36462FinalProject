@@ -1,0 +1,341 @@
+---
+title: "462FinalProject"
+author: "Lufei Yang"
+date: "2025-04-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(skimr)
+library(naniar)
+
+
+fl22 <- read_csv("flights2022.csv")
+fl23 <- read_csv("flights2023.csv")
+fl    <- bind_rows(
+  fl22 %>% mutate(dataset = "2022"),
+  fl23 %>% mutate(dataset = "2023")
+)
+
+dim(fl22); dim(fl23)
+glimpse(fl)
+skim(fl)
+
+# Missingness 
+missings <- fl %>%
+  miss_var_summary() %>%
+  arrange(desc(n_miss))
+print(missings)
+
+# Target distribution
+fl <- fl %>%
+  mutate(DEP_DEL15 = as.integer(DEP_DEL15))
+
+fl %>%
+  count(dataset, DEP_DEL15) %>%
+  group_by(dataset) %>%
+  mutate(pct = n / sum(n))
+
+# Temporal patterns 
+fl <- fl %>%
+  mutate(
+    flight_date = as.Date(FL_DATE),
+    month       = factor(month(flight_date, label = TRUE), ordered = TRUE),
+    weekday     = factor(wday(flight_date, label = TRUE), ordered = TRUE)
+  )
+
+# flights per month
+fl %>% count(dataset, month) %>% arrange(dataset, month)
+
+# delay rate by weekday
+fl %>%
+  group_by(dataset, weekday) %>%
+  summarise(
+    avg_delay = mean(DEP_DEL15, na.rm = TRUE),
+    n_flights = n()
+  ) %>%
+  arrange(dataset, weekday)
+
+# Carrier‑level summary 
+fl %>%
+  group_by(OP_UNIQUE_CARRIER) %>%
+  summarise(
+    n_flights  = n(),
+    delay_rate = mean(DEP_DEL15, na.rm = TRUE)
+  ) %>%
+  arrange(desc(n_flights)) %>%
+  slice_head(n = 10)
+
+# Departure delay stats 
+fl %>%
+  filter(!is.na(DEP_DELAY)) %>%
+  summarise(
+    mean_delay   = mean(DEP_DELAY),
+    sd_delay     = sd(DEP_DELAY),
+    median_delay = median(DEP_DELAY),
+    max_delay    = max(DEP_DELAY)
+  )
+
+```
+
+The combined 2022–23 PIT departures dataset comprises roughly 137000 flights and 64 raw fields. Three post‑departure metrics (`FIRST_DEP_TIME`, `TOTAL_ADD_GTIME`, `LONGEST_ADD_GTIME`) are missing in over 99% of records—since they only exist once a flight actually departs, they leak the outcome and can be dropped. Similarly, the five “cause‑of‑delay” columns (carrier, weather, NAS, security, late‑aircraft) are about 82% missing, as they’re only populated on a delay, so they too must be excluded. By contrast, arrival details like `ARR_DELAY`, `WHEELS_OFF`, and `TAXI_IN/OUT` exceed 97% completeness and offer strong predictive signal.
+
+Our binary target, `DEP_DEL15`, shows that 19.1% of flights in 2022 (17.4% in 2023) were delayed by at least 15minutes, with cancellations (NA) under 3.5%. Flight volume is steady at about 2000 departures per month, so seasonal effects are likely subtle; however, weekday variation is pronounced—Tuesdays and Saturdays see delay rates around 21–22%, while Mondays drop to about 17%. Carrier‑level analysis reveals a wide spread among the busiest operators: delay rates range from 11.5% (carrier YX) up to 27.1% (G4), with most majors falling between 15% and 26%. Together, these patterns suggest dropping the post‑departure and cause‑of‑delay fields, leveraging complete arrival metrics, encoding weekday effects, and grouping carriers by historical performance as key steps before model training.
+
+
+```{r}
+fl %>%
+  group_by(weekday) %>%
+  summarise(delay_rate = mean(DEP_DEL15, na.rm=TRUE)) %>%
+  ggplot(aes(x=weekday, y=delay_rate)) +
+    geom_col() +
+    labs(title="Delay Rate by Weekday", y="P(Delay ≥15min)")
+
+fl %>%
+  group_by(DEP_TIME_BLK) %>%
+  summarise(delay_rate = mean(DEP_DEL15, na.rm=TRUE), n=n()) %>%
+  filter(n > 100) %>%              # drop tiny bins
+  ggplot(aes(x=DEP_TIME_BLK, y=delay_rate)) +
+    geom_col() +
+    theme(axis.text.x = element_text(angle=45, hjust=1)) +
+    labs(title="Delay Rate by Scheduled Departure Time Block", y="P(Delay ≥15min)")
+
+fl %>%
+  filter(!is.na(DEP_DELAY)) %>%
+  ggplot(aes(x=factor(DISTANCE_GROUP), y=DEP_DELAY)) +
+    geom_boxplot(outlier.shape=NA) +
+    coord_flip() +
+    labs(x="Distance Group", y="Departure Delay (min)",
+         title="DEP_DELAY Distribution by Distance Group")
+
+fl %>%
+  filter(!is.na(TAXI_OUT), !is.na(DEP_DELAY)) %>%
+  ggplot(aes(x=TAXI_OUT, y=DEP_DELAY)) +
+    geom_point(alpha=0.2) +
+    geom_smooth(method="lm", se=FALSE) +
+    labs(title="DEP_DELAY vs. Taxi-Out Time", x="Taxi-Out (min)", y="Departure Delay (min)")
+
+```
+From plots:
+
+1. Weekday effects
+Tuesdays still top the chart (~21% chance of ≥15min delay), with Wednesdays lowest (~16%). There’s a clear, roughly 5pp swing across the week—definitely worth encoding as a factor.
+
+2. Time‑of‑day ramp
+Delay probability climbs steadily from the early morning (only ~6% between midnight–6AM) to the evening peak (~33% for 8–9PM departures). A simple 24‑level DEP_TIME_BLK factor (or even a numeric “hour of day”) should capture a large chunk of our signal.
+
+3. Distance group vs. delay
+Each successive distance bucket shows a slight upward shift in median departure delay, but the variance is so huge (and the outliers so extreme) that I’d treat distance as a continuous feature—perhaps log‑transforming the raw miles rather than using the coarse groups.
+
+4. Taxi‑out vs. departure delay
+Beyond the obvious outliers (flights that sit on the tarmac forever), there’s almost no linear relationship. Taxi‑out time may still carry some information (e.g. airport congestion), but it’s not a strong standalone predictor and may be better used in interaction (e.g. high‐traffic evening slots).
+
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(pROC)
+
+fl22 <- read_csv("flights2022.csv")
+fl23 <- read_csv("flights2023.csv")
+
+fl <- bind_rows(
+  fl22 %>% mutate(dataset = "2022"),
+  fl23 %>% mutate(dataset = "2023")
+) %>%
+  mutate(
+    DEP_DEL15   = as.integer(DEP_DEL15),
+    flight_date = as.Date(FL_DATE, format = "%m/%d/%Y")
+  )
+
+feats <- fl %>%
+  filter(!is.na(DEP_DEL15)) %>%
+  transmute(
+    DEP_DEL15,
+    TAIL_NUM,
+    flight_date = as.Date(FL_DATE, format = "%m/%d/%Y"),
+    wd          = factor(wday(flight_date, label = TRUE), ordered = TRUE),
+    hr          = CRS_DEP_TIME %/% 100,
+    log_dist    = log(DISTANCE),
+    taxi_out    = TAXI_OUT,
+    carrier     = OP_UNIQUE_CARRIER
+  )
+
+set.seed(42)
+train_ix <- sample(nrow(feats), size = 0.7 * nrow(feats))
+train    <- feats[train_ix, ]
+valid    <- feats[-train_ix, ]
+
+enc <- train %>%
+  group_by(carrier) %>%
+  summarise(carrier_rate = mean(DEP_DEL15), .groups = "drop")
+
+base_rate <- mean(train$DEP_DEL15)
+
+train <- train %>%
+  left_join(enc, by = "carrier")
+
+valid <- valid %>%
+  left_join(enc, by = "carrier") %>%
+  mutate(carrier_rate = replace_na(carrier_rate, base_rate))
+
+mod_glm <- glm(
+  DEP_DEL15 ~ wd + hr + log_dist + taxi_out + carrier_rate,
+  data   = train,
+  family = binomial
+)
+
+pred_p  <- predict(mod_glm, newdata = valid, type = "response")
+roc_obj <- roc(valid$DEP_DEL15, pred_p)
+auc_val <- auc(roc_obj)
+cat("Logistic AUC:", round(auc_val, 4), "\n")
+
+```
+```{r}
+library(tidyverse)
+library(lubridate)
+library(xgboost)
+library(pROC)
+
+# prepare previous‐flight arrival delays
+last_arr <- fl %>%
+  filter(!is.na(ARR_DELAY)) %>%
+  transmute(
+    TAIL_NUM,
+    flight_date    = as.Date(FL_DATE, format = "%m/%d/%Y"),
+    hr              = CRS_DEP_TIME %/% 100,
+    prev_arr_delay = ARR_DELAY
+  ) %>%
+  arrange(TAIL_NUM, flight_date, hr) %>%
+  group_by(TAIL_NUM, flight_date, hr) %>%
+  slice_tail(n = 1) %>%
+  ungroup()
+
+# merge into train/valid and impute
+train2 <- train %>%
+  left_join(last_arr, by = c("TAIL_NUM","flight_date","hr")) %>%
+  mutate(
+    prev_arr_delay = replace_na(prev_arr_delay, 0),
+    taxi_out       = replace_na(taxi_out, median(taxi_out, na.rm = TRUE))
+  )
+
+valid2 <- valid %>%
+  left_join(last_arr, by = c("TAIL_NUM","flight_date","hr")) %>%
+  mutate(
+    prev_arr_delay = replace_na(prev_arr_delay, 0),
+    taxi_out       = replace_na(taxi_out, median(train2$taxi_out, na.rm = TRUE))
+  )
+
+# build model matrices
+x_train <- model.matrix(~ wd + hr + log_dist + taxi_out + carrier_rate + prev_arr_delay - 1, data = train2)
+x_valid <- model.matrix(~ wd + hr + log_dist + taxi_out + carrier_rate + prev_arr_delay - 1, data = valid2)
+
+dtrain <- xgb.DMatrix(data = x_train, label = train2$DEP_DEL15)
+dvalid <- xgb.DMatrix(data = x_valid, label = valid2$DEP_DEL15)
+
+params <- list(
+  objective   = "binary:logistic",
+  eval_metric = "auc",
+  eta         = 0.1,
+  max_depth   = 4
+)
+
+bst <- xgb.train(
+  params,
+  dtrain,
+  nrounds               = 100,
+  watchlist             = list(train = dtrain, valid = dvalid),
+  early_stopping_rounds = 10,
+  verbose               = 0
+)
+
+pred_xgb <- predict(bst, dvalid)
+auc_xgb  <- auc(roc(valid2$DEP_DEL15, pred_xgb))
+cat("XGBoost AUC:", round(auc_xgb, 4), "\n")
+
+```
+
+
+
+```{r}
+library(ggplot2)
+library(pROC)
+library(xgboost)
+
+# ROC curve comparison 
+# compute ROC objects
+roc_glm <- roc(valid$DEP_DEL15, pred_p)
+roc_xgb <- roc(valid2$DEP_DEL15, pred_xgb)  
+
+# build a data frame for ggplot
+roc_df <- bind_rows(
+  tibble(
+    fpr = 1 - roc_glm$specificities,
+    tpr = roc_glm$sensitivities,
+    model = "Logistic"
+  ),
+  tibble(
+    fpr = 1 - roc_xgb$specificities,
+    tpr = roc_xgb$sensitivities,
+    model = "XGBoost"
+  )
+)
+
+ggplot(roc_df, aes(x = fpr, y = tpr, color = model)) +
+  geom_line(size = 1) +
+  geom_abline(lty = 2) +
+  labs(
+    title = "ROC Curves: Logistic vs XGBoost",
+    x = "False Positive Rate",
+    y = "True Positive Rate"
+  )
+
+# Feature importance from XGBoost
+imp <- xgb.importance(model = bst)
+# plot top 10
+top_imp <- imp[1:10, ]
+ggplot(top_imp, aes(x = reorder(Feature, Gain), y = Gain)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Top 10 XGBoost Features by Gain",
+    x = NULL, y = "Relative Importance (Gain)"
+  )
+
+# Calibration plot for XGBoost 
+valid2$pred_bin <- cut(pred_xgb, breaks = seq(0,1, by = .1), include.lowest = TRUE)
+calib <- valid2 %>%
+  group_by(pred_bin) %>%
+  summarise(
+    mean_pred = mean(pred_xgb),
+    obs_rate  = mean(DEP_DEL15),
+    n         = n()
+  )
+
+ggplot(calib, aes(x = mean_pred, y = obs_rate)) +
+  geom_point(aes(size = n), alpha = 0.6) +
+  geom_abline(lty = 2) +
+  labs(
+    title = "Calibration Plot: XGBoost",
+    x = "Mean Predicted Probability",
+    y = "Observed Delay Rate"
+  ) +
+  scale_size_area("Bin size")
+
+# 4. Partial dependence for previous‐arrival delay
+library(pdp)
+pd_prev <- partial(bst, pred.var = "prev_arr_delay", train = x_train, grid.resolution = 20)
+autoplot(pd_prev) +
+  labs(
+    title = "Partial Dependence: Previous Flight Arrival Delay",
+    x = "Prev Arr Delay (min)",
+    y = "Predicted Delay Probability"
+  )
+
+```
