@@ -9,6 +9,8 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+## data exploration
 ```{r}
 library(tidyverse)
 library(lubridate)
@@ -136,7 +138,7 @@ Each successive distance bucket shows a slight upward shift in median departure 
 4. Taxi‑out vs. departure delay
 Beyond the obvious outliers (flights that sit on the tarmac forever), there’s almost no linear relationship. Taxi‑out time may still carry some information (e.g. airport congestion), but it’s not a strong standalone predictor and may be better used in interaction (e.g. high‐traffic evening slots).
 
-
+## baseline
 ```{r}
 library(tidyverse)
 library(lubridate)
@@ -255,6 +257,40 @@ bst <- xgb.train(
   verbose               = 0
 )
 
+params <- list(
+  objective        = "binary:logistic",
+  eval_metric      = "auc",
+  eta              = 0.05,      # halve the learning rate
+  max_depth        = 4,         # keep trees shallow
+  subsample        = 0.8,       # sample 80% of rows per tree
+  colsample_bytree = 0.7,       # sample 70% of columns per tree
+  lambda           = 1.0,       # L2 regularization
+  alpha            = 0.5        # L1 regularization
+)
+
+bst <- xgb.train(
+  params                = params,
+  data                  = dtrain,
+  nrounds               = 200,                # allow more rounds, but ES will stop early
+  watchlist             = list(train=dtrain, valid=dvalid),
+  early_stopping_rounds = 10,
+  record                = TRUE,
+  verbose               = 1
+)
+
+# replot the learning curve to confirm the gap narrowed
+log <- as.data.frame(bst$evaluation_log)
+library(ggplot2)
+ggplot(log, aes(x=iter)) +
+  geom_line(aes(y=train_auc, color="Train")) +
+  geom_line(aes(y=valid_auc, color="Valid")) +
+  labs(title="Regularized XGB Learning Curve",
+       x="Boost Round", y="AUC") +
+  scale_color_manual("",values=c("Train"="steelblue","Valid"="firebrick")) +
+  geom_vline(xintercept=bst$best_iteration, linetype=2) +
+  theme_minimal()
+
+
 pred_xgb <- predict(bst, dvalid)
 auc_xgb  <- auc(roc(valid2$DEP_DEL15, pred_xgb))
 cat("XGBoost AUC:", round(auc_xgb, 4), "\n")
@@ -262,7 +298,7 @@ cat("XGBoost AUC:", round(auc_xgb, 4), "\n")
 ```
 
 
-
+## Analysis on xgboost
 ```{r}
 library(ggplot2)
 library(pROC)
@@ -339,3 +375,100 @@ autoplot(pd_prev) +
   )
 
 ```
+
+```{r}
+# =============================
+# Final Test‐Set Pipeline & Submission
+# =============================
+
+library(tidyverse)
+library(lubridate)
+library(xgboost)
+
+# — assume these objects are already in your workspace from training:
+#    bst         : your fitted xgboost model
+#    enc         : data frame (carrier, carrier_rate)
+#    base_rate   : overall mean(train$DEP_DEL15)
+#    last_arr    : data frame (TAIL_NUM, flight_date, hr, prev_arr_delay)
+#    train       : your training data.frame (for wd levels & taxi_out median)
+#    valid2      : your validation data.frame (for test.acc & pred_xgb)
+
+# 1. Read the guess file, forcing key columns to numeric
+test_guess <- read_csv(
+  "flights2024_guess.csv",
+  col_types = cols(
+    TAIL_NUM          = col_character(),
+    FL_DATE           = col_character(),
+    OP_UNIQUE_CARRIER = col_character(),
+    CRS_DEP_TIME      = col_double(),
+    DISTANCE          = col_double(),
+    TAXI_OUT          = col_double(),
+    .default          = col_guess()
+  )
+)
+
+# 2. Feature‐engineer the test set
+test_feat <- test_guess %>%
+  mutate(
+    flight_date    = as.Date(FL_DATE, "%m/%d/%Y"),
+    wd             = factor(
+                       wday(flight_date, label = TRUE),
+                       levels = levels(train$wd),
+                       ordered = TRUE
+                     ),
+    hr             = CRS_DEP_TIME %/% 100,
+    log_dist       = log(DISTANCE),
+    taxi_out       = TAXI_OUT,
+    carrier        = OP_UNIQUE_CARRIER
+  ) %>%
+  # carrier mean‐encoding
+  left_join(enc, by = "carrier") %>%
+  mutate(
+    carrier_rate = coalesce(carrier_rate, base_rate)
+  ) %>%
+  # previous‐flight arrival delay
+  left_join(
+    last_arr,
+    by = c("TAIL_NUM", "flight_date", "hr")
+  ) %>%
+  mutate(
+    prev_arr_delay = replace_na(prev_arr_delay, 0),
+    taxi_out       = replace_na(taxi_out, median(train$taxi_out, na.rm = TRUE))
+  )
+
+# 3. Generate predictions
+x_test <- model.matrix(
+  ~ wd + hr + log_dist + taxi_out + carrier_rate + prev_arr_delay - 1,
+  data = test_feat
+)
+delay.guesses <- predict(bst, xgb.DMatrix(x_test))
+
+# 4. Estimate test‐set accuracy (using your validation proxy)
+test.acc <- mean((pred_xgb >= 0.5) != valid2$DEP_DEL15)
+
+# 5. Define your team name and save
+team.name <- "Team462"
+
+save(
+  list = c("delay.guesses", "test.acc", "team.name"),
+  file = "Team462final.RData"
+)
+
+
+```
+
+```{r}
+load("Team462final.RData")
+length(delay.guesses)   # should now be 8723 (or however many test rows)
+head(delay.guesses)
+summary(delay.guesses)
+View(delay.guesses)
+
+print(team.name)
+print(test.acc)
+nrow(read_csv("flights2024_guess.csv"))
+length(delay.guesses)
+tail(delay.guesses)
+
+```
+
