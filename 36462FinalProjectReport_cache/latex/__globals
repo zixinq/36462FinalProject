@@ -1,0 +1,12 @@
+unnamed-chunk-1	%>%	bind_rows	library	mutate	read_csv
+unnamed-chunk-2	%>%	==	dim	filter	fl	fl22	fl23	glimpse	ORIGIN	skim
+unnamed-chunk-3	::	%>%	aes	arrange	as.factor	as.integer	count	dataset	DEP_DEL15	desc	fl_departures	geom_bar	ggplot	group_by	labs	miss_var_summary	mutate	n	n_miss	percent	scale_y_continuous	sum	theme_minimal
+unnamed-chunk-4	::	%>%	aes	as.Date	delay_rate	DEP_DEL15	factor	FL_DATE	flight_date	geom_bar	ggplot	group_by	labs	mean	month	mutate	scale_y_continuous	summarise	theme_minimal	wday	weekday
+unnamed-chunk-5	::	%>%	>	aes	delay_rate	DEP_DEL15	DEP_TIME_BLK	element_text	filter	fl	geom_bar	ggplot	group_by	labs	mean	n	scale_y_continuous	summarise	theme
+unnamed-chunk-6	::	%>%	==	>	aes	coord_flip	delay_rate	DEP_DEL15	filter	fl_departures	geom_bar	ggplot	group_by	labs	mean	n	OP_UNIQUE_CARRIER	reorder	scale_y_continuous	summarize	theme_minimal
+unnamed-chunk-7	!	%>%	aes	coord_flip	DEP_DELAY	DISTANCE_GROUP	factor	filter	fl	geom_boxplot	ggplot	is.na	labs
+unnamed-chunk-8	!	%>%	~	$	as.Date	auc	binomial	carrier	carrier_rate	CRS_DEP_TIME	DEP_DEL15	DISTANCE	factor	filter	fl	FL_DATE	flight_date	glm	group_by	is.na	left_join	library	log	mean	mutate	nrow	OP_UNIQUE_CARRIER	predict	replace_na	roc	sample	set.seed	summarise	TAIL_NUM	TAXI_OUT	transmute	wday
+unnamed-chunk-9	!=	%>%	>	$	abs	abs_estimate	aes	arrange	as.data.frame	coord_flip	desc	estimate	Estimate	feature	filter	geom_bar	ggplot	labs	library	mod_glm	mutate	Pr(>|z|)	rename	reorder	rownames_to_column	slice_max	Std. Error	summary	theme_minimal	z value
+unnamed-chunk-10	!	%>%	~	$	aes	ARR_DELAY	arrange	as.data.frame	as.Date	auc	c	CRS_DEP_TIME	filter	fl	FL_DATE	flight_date	geom_line	geom_vline	ggplot	group_by	hr	is.na	iter	labs	left_join	library	list	median	model.matrix	mutate	predict	prev_arr_delay	replace_na	roc	scale_color_manual	slice_tail	TAIL_NUM	taxi_out	theme_minimal	train	train_auc	transmute	ungroup	valid	valid_auc	xgb.DMatrix	xgb.train
+unnamed-chunk-11	bst	xgb.importance	xgb.plot.importance
+unnamed-chunk-12	$	aes	bind_rows	bst	coord_flip	Feature	fpr	Gain	geom_abline	geom_col	geom_line	ggplot	labs	model	pred_p	pred_xgb	reorder	roc	tibble	tpr	valid	valid2	xgb.importance

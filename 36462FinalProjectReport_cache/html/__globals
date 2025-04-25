@@ -1,0 +1,8 @@
+unnamed-chunk-1	::	%>%	bind_rows	library	list	mutate	read_csv
+unnamed-chunk-2	%>%	==	dim	filter	fl	fl22	fl23	glimpse	ORIGIN	skim
+unnamed-chunk-3	::	%>%	aes	arrange	as.factor	count	dataset	DEP_DEL15	desc	fl_departures	geom_bar	ggplot	group_by	labs	miss_var_summary	mutate	n	n_miss	percent	print	scale_y_continuous	sum	theme_minimal
+unnamed-chunk-4	%>%	arrange	as.integer	count	dataset	DEP_DEL15	desc	group_by	miss_var_summary	mutate	n	n_miss	print	sum
+unnamed-chunk-5	!	%>%	arrange	as.Date	count	dataset	DEP_DEL15	DEP_DELAY	desc	factor	filter	FL_DATE	flight_date	group_by	is.na	max	mean	median	month	mutate	n	n_flights	OP_UNIQUE_CARRIER	sd	slice_head	summarise	wday	weekday
+unnamed-chunk-6	!	%>%	~	$	as.Date	auc	binomial	carrier	carrier_rate	cat	CRS_DEP_TIME	DEP_DEL15	DISTANCE	factor	filter	fl	FL_DATE	flight_date	glm	group_by	is.na	left_join	library	log	mean	mutate	nrow	OP_UNIQUE_CARRIER	predict	replace_na	roc	round	sample	set.seed	summarise	TAIL_NUM	TAXI_OUT	transmute	wday
+unnamed-chunk-7	!	%>%	~	$	aes	ARR_DELAY	arrange	as.data.frame	as.Date	auc	c	cat	CRS_DEP_TIME	filter	fl	FL_DATE	flight_date	geom_line	geom_vline	ggplot	group_by	hr	is.na	iter	labs	left_join	library	list	median	model.matrix	mutate	predict	prev_arr_delay	replace_na	roc	round	scale_color_manual	slice_tail	TAIL_NUM	taxi_out	theme_minimal	train	train_auc	transmute	ungroup	valid	valid_auc	xgb.DMatrix	xgb.train
+unnamed-chunk-8	$	aes	bind_rows	bst	coord_flip	Feature	fpr	Gain	geom_abline	geom_col	geom_line	ggplot	labs	model	pred_p	pred_xgb	reorder	roc	tibble	tpr	valid	valid2	xgb.importance
