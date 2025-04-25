@@ -1,11 +1,6 @@
 ---
 title: "Predicting Flight Delays at PIT"
-author: "Team462"
-output:
-  pdf_document: default
-  html_document:
-    df_print: paged
-  word_document: default
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -74,7 +69,7 @@ fl %>%
 ```
 
 
-```{r}
+```{r, fig.cap = "Proportion of Delayed Flights by Year (2022 vs 2023)"}
 fl <- fl %>%
   mutate(DEP_DEL15 = as.integer(DEP_DEL15))
 
@@ -96,7 +91,7 @@ We assessed the missingness in the combined dataset and found that most core var
 The response variable `DEP_DEL15` had a relatively low missing rate of ~2.5%. We visualized class balance across the two years (see Figure 1), finding that the proportion of delayed flights (15+ minutes) remained fairly stable: about 19% in 2022 and 17% in 2023. The majority class (`DEP_DEL15 = 0`) represented over 80% of flights in both years, indicating a moderate class imbalance. Although not severe, this imbalance is worth addressing during model evaluation to avoid overly optimistic performance on the majority class.
 
 ## Initial Trends and Patterns
-```{r}
+```{r delay_rate_weekday, fig.cap="Delay Rate by Day of Week"}
 # Add temporal features
 fl <- fl %>%
   mutate(
@@ -117,7 +112,7 @@ fl %>%
     theme_minimal()
 ```
 
-```{r}
+```{r delay_rate_dep_time, fig.cap="Delay Rate by Scheduled Departure Time Block"}
 # Plot delay rate by scheduled departure hour
 fl %>%
   group_by(DEP_TIME_BLK) %>%
@@ -130,7 +125,7 @@ fl %>%
     scale_y_continuous(labels = scales::percent_format()) 
 ```
 
-```{r}
+```{r, fig.cap = "Delay Rate by Carrier"}
 # Plot delay rate by carrier
 fl_departures %>%
   group_by(OP_UNIQUE_CARRIER) %>%
@@ -146,7 +141,7 @@ fl_departures %>%
 ```
 
 
-```{r}
+```{r, fig.cap = "Departure Delay Distribution by Distance Group"}
 fl %>%
   filter(!is.na(DEP_DELAY)) %>%
   ggplot(aes(x=factor(DISTANCE_GROUP), y=DEP_DELAY)) +
@@ -278,9 +273,10 @@ coef_df <- summary(mod_glm)$coefficients %>%
   ) %>%
   mutate(abs_estimate = abs(estimate)) %>%
   arrange(desc(abs_estimate))
+```
 
+```{r, fig.cap = "Top Features from Logistic Regression Model"}
 # Plot top features by absolute value of coefficients
-
 coef_df %>%
   filter(feature != "(Intercept)") %>%
   slice_max(abs_estimate, n = 10) %>%
@@ -293,6 +289,7 @@ coef_df %>%
        fill = "Direction") +
   theme_minimal()
 ```
+
 The `carrier_rate` variable was the strongest predictor, followed by weekday contrasts and departure hour. This confirms the value of including both historical performance and temporal scheduling variables in the model.
 
 ## 3.3 XGBoost Model
@@ -371,6 +368,12 @@ bst <- xgb.train(
   verbose               = 1
 )
 
+pred_xgb <- predict(bst, dvalid)
+auc_xgb  <- auc(roc(valid2$DEP_DEL15, pred_xgb))
+#cat("XGBoost AUC:", round(auc_xgb, 4), "\n")
+```
+
+```{r, fig.cap = "XGBoost Training and Validation AUC Over Boosting Rounds"}
 # replot the learning curve to confirm the gap narrowed
 log <- as.data.frame(bst$evaluation_log)
 
@@ -382,12 +385,8 @@ ggplot(log, aes(x=iter)) +
   scale_color_manual("",values=c("Train"="steelblue","Valid"="firebrick")) +
   geom_vline(xintercept=bst$best_iteration, linetype=2) +
   theme_minimal()
-
-
-pred_xgb <- predict(bst, dvalid)
-auc_xgb  <- auc(roc(valid2$DEP_DEL15, pred_xgb))
-#cat("XGBoost AUC:", round(auc_xgb, 4), "\n")
 ```
+
 
 ## 3.4 XGBoost Feature Importance
 As shown in Figure 9, the most influential feature by far was `prev_arr_delay`, contributing approximately 89% of the total gain. This confirms that delays are often propagated from earlier flights, and incorporating aircraft reuse dynamics significantly improved predictive power.
@@ -401,7 +400,7 @@ Remaining predictors, including `log_dist` and `day-of-week` dummies (e.g., `wdF
 
 These results suggest that short-term operational factors, rather than static scheduling variables, are most predictive of departure delays. Incorporating real-time or near-real-time operational history — like aircraft arrival delays — is essential for high-performing models in this domain.
 
-```{r}
+```{r, fig.cap = "Top Features from XGBoost Model"}
 # Get feature importance
 importance <- xgb.importance(model = bst)
 
@@ -409,30 +408,12 @@ importance <- xgb.importance(model = bst)
 xgb.plot.importance(importance_matrix = importance, top_n = 10, rel_to_first = TRUE)
 ```
 
-# Model Evaluation
 
-```{r}
-roc_glm <- roc(valid$DEP_DEL15, pred_p)
-roc_xgb <- roc(valid2$DEP_DEL15, pred_xgb)
+# 4. Conclusion and Future Work
 
-roc_df <- bind_rows(
-  tibble(fpr = 1 - roc_glm$specificities, tpr = roc_glm$sensitivities, model = "Logistic"),
-  tibble(fpr = 1 - roc_xgb$specificities, tpr = roc_xgb$sensitivities, model = "XGBoost")
-)
+Through this project, we demonstrated that carefully engineered features, particularly those capturing real-time operational factors like aircraft reuse (`prev_arr_delay`), dramatically improve delay prediction performance. 
 
-ggplot(roc_df, aes(x = fpr, y = tpr, color = model)) +
-  geom_line(size = 1) +
-  geom_abline(lty = 2) +
-  labs(title = "ROC Curve: Logistic vs XGBoost", x = "False Positive Rate", y = "True Positive Rate")
+Our final XGBoost model achieved a validation AUC of 0.9683, substantially outperforming a logistic regression baseline (AUC 0.6884). Key lessons included the importance of incorporating lagged features, temporal patterns, and carrier-specific reliability information.
 
-imp <- xgb.importance(model = bst)
-ggplot(imp[1:10, ], aes(x = reorder(Feature, Gain), y = Gain)) +
-  geom_col() +
-  coord_flip() +
-  labs(title = "Top 10 XGBoost Features", y = "Gain")
-```
-
-# Conclusion
-
-Our analysis demonstrates that structured feature engineering combined with gradient boosting can yield strong predictive power for identifying delayed flights. XGBoost achieved the best performance with an AUC of approximately $0.78$ on the validation set. Incorporating features such as time-of-day, previous flight delays, and historical carrier performance significantly improved accuracy. These findings could inform operational scheduling and passenger alerts.
+For future work, integrating real-time weather data, airport congestion statistics, and dynamic airline schedules could further enhance performance. Additionally, real-world deployment would require tuning decision thresholds based on specific operational costs and user priorities.
 
