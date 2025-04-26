@@ -1,5 +1,7 @@
 ---
 title: "Predicting Flight Delays at PIT"
+author: "Lufei Yang, Joyce Qiu"
+date: "2025-04-25"
 output: pdf_document
 ---
 
