@@ -1,15 +1,20 @@
 unnamed-chunk-1	%>%	bind_rows	library	mutate	read_csv
 unnamed-chunk-2	%>%	==	dim	filter	fl	fl22	fl23	glimpse	ORIGIN	skim
-unnamed-chunk-3	%>%	arrange	count	dataset	DEP_DEL15	desc	fl	group_by	miss_var_summary	mutate	n	n_miss	sum
-unnamed-chunk-4	::	%>%	aes	as.factor	as.integer	count	dataset	DEP_DEL15	fl_departures	geom_bar	ggplot	group_by	labs	mutate	n	percent	scale_y_continuous	sum	theme_minimal
-unnamed-chunk-5	::	%>%	==	>	aes	coord_flip	delay_rate	DEP_DEL15	filter	fl_departures	geom_bar	ggplot	group_by	labs	mean	n	OP_UNIQUE_CARRIER	reorder	scale_y_continuous	summarize	theme_minimal
-unnamed-chunk-6	!	%>%	aes	coord_flip	DEP_DELAY	DISTANCE_GROUP	factor	filter	fl	geom_boxplot	ggplot	is.na	labs
-unnamed-chunk-7	!	%>%	~	$	as.Date	auc	binomial	carrier	carrier_rate	CRS_DEP_TIME	DEP_DEL15	DISTANCE	factor	filter	fl	FL_DATE	flight_date	glm	group_by	is.na	left_join	library	log	mean	mutate	nrow	OP_UNIQUE_CARRIER	predict	replace_na	roc	sample	set.seed	summarise	TAIL_NUM	TAXI_OUT	transmute	wday
-unnamed-chunk-8	%>%	$	abs	abs_estimate	arrange	as.data.frame	desc	estimate	Estimate	mod_glm	mutate	Pr(>|z|)	rename	rownames_to_column	Std. Error	summary	z value
-unnamed-chunk-9	!=	%>%	>	abs_estimate	aes	coef_df	coord_flip	estimate	feature	filter	geom_bar	ggplot	labs	reorder	slice_max	theme_minimal
-unnamed-chunk-10	!	%>%	~	$	ARR_DELAY	arrange	as.Date	auc	c	CRS_DEP_TIME	filter	fl	FL_DATE	flight_date	group_by	hr	is.na	left_join	library	list	median	model.matrix	mutate	predict	prev_arr_delay	replace_na	roc	slice_tail	TAIL_NUM	taxi_out	train	transmute	ungroup	valid	xgb.DMatrix	xgb.train
-unnamed-chunk-11	$	aes	as.data.frame	bst	c	geom_line	geom_vline	ggplot	iter	labs	scale_color_manual	theme_minimal	train_auc	valid_auc
-unnamed-chunk-12	bst	xgb.importance	xgb.plot.importance
-unnamed-chunk-13	$	aes	bind_rows	fpr	geom_abline	geom_line	ggplot	labs	model	pred_p	pred_xgb	roc	tibble	tpr	valid	valid2
+unnamed-chunk-3	::	%>%	aes	as.factor	as.integer	count	dataset	DEP_DEL15	fl_departures	geom_bar	ggplot	group_by	labs	library	mutate	n	percent	scale_y_continuous	sum	theme_minimal
+unnamed-chunk-4	%>%	arrange	count	dataset	DEP_DEL15	desc	fl	group_by	miss_var_summary	mutate	n	n_miss	sum
+unnamed-chunk-5	grid.layout	grid.newpage	library	p1	p2	print	pushViewport	viewport
+unnamed-chunk-6	::	%>%	==	>	aes	coord_flip	delay_rate	DEP_DEL15	filter	fl_departures	geom_bar	ggplot	group_by	labs	mean	n	OP_UNIQUE_CARRIER	reorder	scale_y_continuous	summarize	theme_minimal
+unnamed-chunk-7	grid.layout	p3	p4	print	pushViewport	viewport
+unnamed-chunk-8	!	%>%	~	$	as.Date	auc	binomial	carrier	carrier_rate	CRS_DEP_TIME	DEP_DEL15	DISTANCE	factor	filter	fl	FL_DATE	flight_date	glm	group_by	is.na	left_join	library	log	mean	mutate	nrow	OP_UNIQUE_CARRIER	predict	replace_na	roc	sample	set.seed	summarise	TAIL_NUM	TAXI_OUT	transmute	wday
+unnamed-chunk-9	!	%>%	~	$	ARR_DELAY	arrange	as.Date	auc	c	CRS_DEP_TIME	filter	fl	FL_DATE	flight_date	group_by	hr	is.na	left_join	library	list	median	model.matrix	mutate	predict	prev_arr_delay	replace_na	roc	slice_tail	TAIL_NUM	taxi_out	train	transmute	ungroup	valid	xgb.DMatrix	xgb.train
+unnamed-chunk-10	$	aes	as.data.frame	bst	c	geom_line	geom_vline	ggplot	iter	labs	scale_color_manual	theme_minimal	train_auc	valid_auc
+unnamed-chunk-11	bst	element_text	labs	theme	xgb.ggplot.importance	xgb.importance
+unnamed-chunk-12	%>%	==	>	accuracy	arrange	carrier	correct	DEP_DEL15	desc	group_by	head	hr	ifelse	mean	mutate	n	pred_class	pred_xgb	summarize	wd
+unnamed-chunk-13	::	%>%	accuracy	aes	avg_accuracy	flight_performance	geom_line	geom_point	ggplot	group_by	hr	labs	mean	n_flights	scale_y_continuous	sum	summarize	theme_minimal
 delay_rate_weekday	::	%>%	aes	as.Date	delay_rate	DEP_DEL15	factor	FL_DATE	flight_date	geom_bar	ggplot	group_by	labs	mean	month	mutate	scale_y_continuous	summarise	theme_minimal	wday	weekday
 delay_rate_dep_time	::	%>%	>	aes	delay_rate	DEP_DEL15	DEP_TIME_BLK	element_text	filter	fl	geom_bar	ggplot	group_by	labs	mean	n	scale_y_continuous	summarise	theme
+unnamed-chunk-14	::	%>%	>	accuracy	aes	avg_accuracy	carrier	coord_flip	filter	flight_performance	geom_col	ggplot	group_by	labs	mean	n_flights	reorder	scale_y_continuous	sum	summarize	theme_minimal
+unnamed-chunk-15	|	element_text	library	p5	p6	plot_annotation	theme
+unnamed-chunk-16	::	%>%	>	accuracy	aes	avg_accuracy	carrier	coord_flip	filter	flight_performance	geom_col	ggplot	group_by	labs	mean	n_flights	reorder	scale_y_continuous	sum	summarize	theme_minimal
+dep_delay_by_distance	!	%>%	aes	coord_flip	DEP_DELAY	DISTANCE_GROUP	factor	filter	fl	geom_boxplot	ggplot	is.na	labs
+unnamed-chunk-17	grid.layout	library	p5	p6	print	pushViewport	viewport
