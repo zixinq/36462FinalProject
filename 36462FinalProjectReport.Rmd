@@ -56,6 +56,22 @@ We worked with flight datasets from 2022 and 2023, containing commercial airline
 
 A breakdown of variable types revealed 49 numeric and 16 character fields. Key variables such as `FL_DATE`, `DEP_DEL15`, `CRS_DEP_TIME`, and `OP_UNIQUE_CARRIER` provided the basis for modeling flight delays. We focused exclusively on departing flights (`ORIGIN == "PIT"`), aligning with the project objective of predicting departure delays based only on information available prior to takeoff.
 
+## 2.2 Missingness and Class Imbalance
+```{r, include = FALSE}
+missings <- fl %>%
+  miss_var_summary() %>%
+  arrange(desc(n_miss))
+
+fl %>%
+  count(dataset, DEP_DEL15) %>%
+  group_by(dataset) %>%
+  mutate(pct = n / sum(n))
+```
+
+We assessed the missingness in the combined dataset and found that most core variables were well-populated, with over 97% completion. However, several post-departure variables were highly incomplete, such as `FIRST_DEP_TIME`, `TOTAL_ADD_GTIME`, and `LONGEST_ADD_GTIME`, each missing in over 99% of records. These fields, along with `CARRIER_DELAY`, `WEATHER_DELAY`, and `LATE_AIRCRAFT_DELAY` (each ~82% missing), represent information not available before departure, and were therefore excluded from feature consideration.
+
+The response variable `DEP_DEL15` had a relatively low missing rate of ~2.5%. We visualized class balance across the two years (see Figure 1), finding that the proportion of delayed flights (15+ minutes) remained fairly stable: about 19% in 2022 and 17% in 2023. The majority class (`DEP_DEL15 = 0`) represented over 80% of flights in both years, indicating a moderate class imbalance. Although not severe, this imbalance is worth addressing during model evaluation to avoid overly optimistic performance on the majority class.
+
 ```{r, fig.show='hold', out.width = "70%"}
 library(ggplot2)
 library(grid)
@@ -75,22 +91,6 @@ fl_departures %>%
   scale_y_continuous(labels = scales::percent_format()) +
   theme_minimal()
 ```
-
-## 2.2 Missingness and Class Imbalance
-```{r, include = FALSE}
-missings <- fl %>%
-  miss_var_summary() %>%
-  arrange(desc(n_miss))
-
-fl %>%
-  count(dataset, DEP_DEL15) %>%
-  group_by(dataset) %>%
-  mutate(pct = n / sum(n))
-```
-
-We assessed the missingness in the combined dataset and found that most core variables were well-populated, with over 97% completion. However, several post-departure variables were highly incomplete, such as `FIRST_DEP_TIME`, `TOTAL_ADD_GTIME`, and `LONGEST_ADD_GTIME`, each missing in over 99% of records. These fields, along with `CARRIER_DELAY`, `WEATHER_DELAY`, and `LATE_AIRCRAFT_DELAY` (each ~82% missing), represent information not available before departure, and were therefore excluded from feature consideration.
-
-The response variable `DEP_DEL15` had a relatively low missing rate of ~2.5%. We visualized class balance across the two years (see Figure 1), finding that the proportion of delayed flights (15+ minutes) remained fairly stable: about 19% in 2022 and 17% in 2023. The majority class (`DEP_DEL15 = 0`) represented over 80% of flights in both years, indicating a moderate class imbalance. Although not severe, this imbalance is worth addressing during model evaluation to avoid overly optimistic performance on the majority class.
 
 ## 2.3 Initial Trends and Patterns
 ```{r delay_rate_weekday, fig.show='hold', out.width = "70%"}
@@ -171,7 +171,7 @@ A strong time-of-day pattern also emerged (Figure 3): morning departures (before
 
 Carrier behavior showed significant variation (Figure 4), with Frontier (F9) and Spirit (NK) exhibiting the highest delay rates, and Delta (DL) and United (UA) performing better — likely reflecting differences in operational efficiency and hub congestion.
 
-We further observed that delay distributions were fairly stable across distance groups (Figure 5), although long-haul flights showed slightly greater variability. Finally, taxi-out time was positively associated with departure delay (Figure 6), suggesting tarmac congestion as a contributing factor, even though taxi-out itself is not directly available pre-departure.
+Finally, taxi-out time was positively associated with departure delay (Figure 5), suggesting tarmac congestion as a contributing factor, even though taxi-out itself is not directly available pre-departure.
 
 These exploratory insights informed our feature engineering choices, motivating the creation of time-of-day flags, carrier delay profiles, and route-level congestion estimates.
 

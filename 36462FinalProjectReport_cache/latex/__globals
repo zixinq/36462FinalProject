@@ -1,7 +1,7 @@
 unnamed-chunk-1	%>%	bind_rows	library	mutate	read_csv
 unnamed-chunk-2	%>%	==	dim	filter	fl	fl22	fl23	glimpse	ORIGIN	skim
-unnamed-chunk-3	::	%>%	aes	as.factor	as.integer	count	dataset	DEP_DEL15	fl_departures	geom_bar	ggplot	group_by	labs	library	mutate	n	percent	scale_y_continuous	sum	theme_minimal
-unnamed-chunk-4	%>%	arrange	count	dataset	DEP_DEL15	desc	fl	group_by	miss_var_summary	mutate	n	n_miss	sum
+unnamed-chunk-3	%>%	arrange	count	dataset	DEP_DEL15	desc	fl	group_by	miss_var_summary	mutate	n	n_miss	sum
+unnamed-chunk-4	::	%>%	aes	as.factor	as.integer	count	dataset	DEP_DEL15	fl_departures	geom_bar	ggplot	group_by	labs	library	mutate	n	percent	scale_y_continuous	sum	theme_minimal
 unnamed-chunk-5	::	library	p1	p2
 unnamed-chunk-6	::	%>%	==	>	aes	coord_flip	delay_rate	DEP_DEL15	filter	fl_departures	geom_bar	ggplot	group_by	labs	mean	n	OP_UNIQUE_CARRIER	reorder	scale_y_continuous	summarize	theme_minimal
 unnamed-chunk-7	::	library	p3	p4
