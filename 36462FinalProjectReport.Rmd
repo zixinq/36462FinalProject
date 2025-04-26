@@ -105,32 +105,30 @@ fl <- fl %>%
 p1 <- fl %>%
   group_by(weekday) %>%
   summarise(delay_rate = mean(DEP_DEL15, na.rm=TRUE)) %>%
-  ggplot(aes(x=weekday, y=delay_rate)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    labs(title="Figure 2. Delay Rate by by Day of Week",x = "Day of Week", y="P(Delay ≥15min)")+
-    scale_y_continuous(labels = scales::percent_format()) +
-    theme_minimal()
+  ggplot(aes(x = weekday, y = delay_rate)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Delay Rate by Day of Week", x = "Day of Week", y = "P(Delay ≥15min)") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
 ```
 
 ```{r delay_rate_dep_time, fig.show='hold', out.width = "70%"}
 # Plot delay rate by scheduled departure hour
 p2 <- fl %>%
   group_by(DEP_TIME_BLK) %>%
-  summarise(delay_rate = mean(DEP_DEL15, na.rm=TRUE), n=n()) %>%
-  filter(n > 100) %>%              # drop tiny bins
-  ggplot(aes(x=DEP_TIME_BLK, y=delay_rate)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    theme(axis.text.x = element_text(angle=45, hjust=1)) +
-    labs(title="Figure 3. Delay Rate by Scheduled Departure Time Block", y="P(Delay ≥15min)") +
-    scale_y_continuous(labels = scales::percent_format()) 
+  summarise(delay_rate = mean(DEP_DEL15, na.rm = TRUE), n = n()) %>%
+  filter(n > 100) %>%
+  ggplot(aes(x = DEP_TIME_BLK, y = delay_rate)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Delay Rate by Scheduled Departure Time Block", x = "Time Block", y = "P(Delay ≥15min)") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal()
 ```
 
-```{r}
-library(grid)
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(1, 2)))
-print(p1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-print(p2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
+```{r, fig.width = 5, fig.height = 3, out.width='80%'}
+library(gridExtra)
+gridExtra::grid.arrange(p1, p2, ncol = 2)
 ```
 
 
@@ -160,10 +158,9 @@ p4 <- fl %>%
          title="Figure 5. DEP_DELAY Distribution by Distance Group")
 ```
 
-```{r}
-pushViewport(viewport(layout = grid.layout(1, 2)))
-print(p3, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-print(p4, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
+```{r, fig.width = 5, fig.height = 3, fig.show='hold', out.width = "80%"}
+library(gridExtra)
+gridExtra::grid.arrange(p3, p4, ncol = 2)
 ```
 
 We explored how delay patterns vary across time and operational characteristics. As shown in Figure 2, flights on Tuesdays experienced the highest delay rates (~21%), while Wednesdays and Sundays had the lowest (~17%), suggesting midweek congestion effects.
@@ -175,7 +172,6 @@ Carrier behavior showed significant variation (Figure 4), with Frontier (F9) and
 We further observed that delay distributions were fairly stable across distance groups (Figure 5), although long-haul flights showed slightly greater variability. Finally, taxi-out time was positively associated with departure delay (Figure 6), suggesting tarmac congestion as a contributing factor, even though taxi-out itself is not directly available pre-departure.
 
 These exploratory insights informed our feature engineering choices, motivating the creation of time-of-day flags, carrier delay profiles, and route-level congestion estimates.
-
 
 ## 2.4 Feature Engineering
 
@@ -347,7 +343,7 @@ ggplot(log, aes(x=iter)) +
   theme_minimal()
 ```
 
-## 3.3 XGBoost Feature Importance
+## 3.3 XGBoost Feature Importance and Calibration
 
 As shown in Figure 7, the most influential feature by far was `prev_arr_delay`, contributing approximately 89% of the total gain. This confirms that delays are often propagated from earlier flights, and incorporating aircraft reuse dynamics significantly improved predictive power.
 
@@ -358,16 +354,47 @@ The second most important feature was taxi_out, a proxy for airport congestion a
 
 Remaining predictors, including `log_dist` and `day-of-week` dummies (e.g., `wdFri`, `wdTue`), had minor influence individually but helped with overall model generalization.
 
-These results suggest that short-term operational factors, rather than static scheduling variables, are most predictive of departure delays. Incorporating real-time or near-real-time operational history — like aircraft arrival delays — is essential for high-performing models in this domain.
+Figure 8 shows that the XGBoost model is well-calibrated, with predicted probabilities aligning closely with observed delay rates across all deciles. This indicates that the model’s output probabilities are not only effective for classification (as shown by high AUC) but also provide meaningful estimates of risk. 
 
 ```{r, fig.show='hold', out.width = "70%"}
 # Get feature importance
 importance <- xgb.importance(model = bst)
 
 # Plot top features
-xgb.ggplot.importance(importance_matrix = importance, top_n = 10, rel_to_first = TRUE) +
+p7 <- xgb.ggplot.importance(importance_matrix = importance, top_n = 10, rel_to_first = TRUE) +
   labs(title = "Figure 7. Top Features from XGBoost Model") +
   theme(plot.title = element_text(size = 12, hjust = 0.5))
+```
+```{r, fig.show='hold', out.width = "70%"}
+calib_df <- tibble(
+  true = valid$DEP_DEL15,
+  prob = pred_xgb
+) %>%
+  mutate(bin = ntile(prob, 10)) %>%
+  group_by(bin) %>%
+  summarize(
+    avg_pred = mean(prob, na.rm=TRUE),
+    obs_rate = mean(true, na.rm=TRUE)
+  )
+
+p8 <- ggplot(calib_df, aes(avg_pred, obs_rate)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(linetype="dashed") +
+  labs(
+    title = "Figure 8. Calibration Curve",
+    x     = "Mean Predicted Probability",
+    y     = "Observed Delay Rate"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+library(grid)
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(1, 2)))
+print(p7, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
+print(p8, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
 ```
 
 # 4. Analysis of Results
@@ -391,7 +418,7 @@ In contrast, we observed lower accuracy on:
 
 - Flights with no observable pre-departure issues that were nonetheless delayed due to unmodeled factors like crew availability or weather. These represent the limits of our feature space.
 
-As visualized in Figures 8-10, the model’s performance is highly sensitive to both the operational context (e.g., time of day, carrier history) and the availability of predictive features (e.g., recent delay signals). While accuracy remained above 90% in most groups, the variability underscores the importance of real-time features and historical profiling in operational delay prediction.
+As visualized in Figures 9, the model’s performance is highly sensitive to both the operational context (e.g., time of day, carrier history) and the availability of predictive features (e.g., recent delay signals). While accuracy remained above 90% in most groups, the variability underscores the importance of real-time features and historical profiling in operational delay prediction.
 
 
 ```{r, include = FALSE}
@@ -467,7 +494,7 @@ p6 <- flight_performance %>%
 library(patchwork)
 (p5 | p6) +
   plot_annotation(
-    caption = "Figure 8. Model Accuracy by Hour (left) and by Carrier (right)",
+    caption = "Figure 9. Model Accuracy by Hour (left) and by Carrier (right)",
     theme = theme(plot.caption = element_text(size = 10, hjust = 0.5))
   )
 ```

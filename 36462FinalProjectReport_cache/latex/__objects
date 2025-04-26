@@ -8,13 +8,13 @@ unnamed-chunk-7
 unnamed-chunk-8	auc_val	base_rate	enc	feats	mod_glm	pred_p	roc_obj	train	train_ix	valid	.Random.seed
 unnamed-chunk-9	auc_xgb	bst	dtrain	dvalid	last_arr	params	pred_xgb	train2	valid2	x_train	x_valid
 unnamed-chunk-10	log
-unnamed-chunk-11	importance
-unnamed-chunk-12	flight_performance	high_conf_thresh	valid2
-unnamed-chunk-13	p5
+unnamed-chunk-11	importance	p7
+unnamed-chunk-12	calib_df	p8
+unnamed-chunk-13	
 delay_rate_weekday	fl	p1
 delay_rate_dep_time	p2
-unnamed-chunk-14	p6
-unnamed-chunk-15	
+unnamed-chunk-14	flight_performance	high_conf_thresh	valid2
+unnamed-chunk-15	p5
 unnamed-chunk-16	p6
 dep_delay_by_distance	p4
 unnamed-chunk-17	
